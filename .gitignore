@@ -1,2 +1,10 @@
 .DS_Store
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+.venv/
+outputs/
+notebooks/.ipynb_checkpoints/
 

@@ -1,0 +1,30 @@
+model:
+  block_size: 64
+  n_layer: 2
+  n_head: 2
+  n_embd: 64
+  dropout: 0.1
+  bias: true
+
+data:
+  path: null
+  train_fraction: 0.9
+  batch_size: 32
+  num_workers: 0
+
+training:
+  seed: 42
+  max_steps: 200
+  learning_rate: 0.0006
+  min_learning_rate: 0.00006
+  warmup_steps: 20
+  weight_decay: 0.1
+  beta1: 0.9
+  beta2: 0.95
+  grad_clip: 1.0
+  eval_interval: 25
+  eval_batches: 10
+  log_interval: 5
+  output_dir: outputs/gpt-small
+  device: auto
+
