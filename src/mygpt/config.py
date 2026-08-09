@@ -32,7 +32,7 @@ class ModelConfig:
 
 @dataclass
 class DataConfig:
-    path: str | None = None
+    path: str | None = "outputs/data/tinystories.txt"
     train_fraction: float = 0.9
     batch_size: int = 32
     num_workers: int = 0
@@ -110,4 +110,3 @@ class ExperimentConfig:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
-

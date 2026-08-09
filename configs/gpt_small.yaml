@@ -7,7 +7,7 @@ model:
   bias: true
 
 data:
-  path: null
+  path: outputs/data/tinystories.txt
   train_fraction: 0.9
   batch_size: 32
   num_workers: 0
@@ -27,4 +27,3 @@ training:
   log_interval: 5
   output_dir: outputs/gpt-small
   device: auto
-

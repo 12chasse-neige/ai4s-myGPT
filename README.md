@@ -30,10 +30,15 @@ On Apple Silicon, PyTorch will use MPS automatically when it is available.
 
 ## Quick start
 
-The small preset uses a bundled demo corpus, so it can run without downloading
-data.
+The default presets train on a local text export of
+[TinyStories](https://huggingface.co/datasets/roneneldan/TinyStories). Prepare it
+once before training. The preparation command streams 10,000 stories by default,
+which keeps this character-level teaching implementation practical.
 
 ```bash
+# Download and export the default TinyStories subset
+python scripts/prepare_data.py
+
 # A short smoke-training run
 python scripts/train.py --config configs/gpt_small.yaml --max-steps 20
 
@@ -45,13 +50,19 @@ python scripts/sample.py --checkpoint outputs/gpt-small/last.pt \
   --prompt "The " --max-new-tokens 120
 ```
 
-To create an editable copy of the demo corpus:
+To use your own UTF-8 corpus instead:
 
 ```bash
-python scripts/prepare_data.py --output outputs/data/demo.txt
+python scripts/prepare_data.py --input path/to/corpus.txt \
+  --output outputs/data/custom.txt
 python scripts/train.py --config configs/gpt_small.yaml \
-  --data outputs/data/demo.txt
+  --data outputs/data/custom.txt
 ```
+
+Use `--max-stories` to change the downloaded TinyStories subset size. The
+upstream dataset has separate train and validation splits; this compact pipeline
+streams the requested training stories and applies its configured contiguous
+train/validation split locally.
 
 Run the tests with:
 
@@ -65,7 +76,8 @@ Every experiment is controlled by a YAML file. Important settings are:
 
 - `model.block_size`: maximum context length.
 - `model.n_layer`, `n_head`, `n_embd`: Transformer size.
-- `data.path`: UTF-8 text file; `null` selects the bundled demo corpus.
+- `data.path`: UTF-8 text file; both bundled presets default to the prepared
+  `outputs/data/tinystories.txt` corpus.
 - `training.max_steps`: number of optimizer updates.
 - `training.device`: `auto`, `cpu`, `mps`, or `cuda`.
 

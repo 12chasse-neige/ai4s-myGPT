@@ -81,7 +81,13 @@ class TokenDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
 def load_text(path: str | Path | None) -> str:
     if path is None:
         return DEMO_TEXT
-    text = Path(path).read_text(encoding="utf-8")
+    corpus_path = Path(path)
+    if not corpus_path.is_file():
+        raise FileNotFoundError(
+            f"text corpus not found: {corpus_path}. Run `python scripts/prepare_data.py` "
+            "to prepare the default TinyStories corpus, or pass `--data PATH`."
+        )
+    text = corpus_path.read_text(encoding="utf-8")
     if not text.strip():
         raise ValueError(f"text corpus is empty: {path}")
     return text
@@ -111,4 +117,3 @@ def build_dataloaders(
     if len(train_loader) == 0:
         raise ValueError("training split is too small for the selected batch_size")
     return train_loader, val_loader
-
