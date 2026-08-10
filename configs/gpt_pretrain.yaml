@@ -1,0 +1,29 @@
+model:
+  block_size: 512
+  n_layer: 8
+  n_head: 8
+  n_embd: 512
+  dropout: 0.1
+  bias: false
+
+data:
+  path: outputs/data/tinystories.txt
+  train_fraction: 0.95
+  batch_size: 16
+  num_workers: 0
+
+training:
+  seed: 42
+  max_steps: 40000
+  learning_rate: 0.0003
+  min_learning_rate: 0.00003
+  warmup_steps: 1000
+  weight_decay: 0.1
+  beta1: 0.9
+  beta2: 0.95
+  grad_clip: 1.0
+  eval_interval: 500
+  eval_batches: 50
+  log_interval: 20
+  output_dir: outputs/gpt-pretrain
+  device: mps
