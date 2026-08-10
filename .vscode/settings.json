@@ -2,5 +2,7 @@
   "terminal.integrated.env.osx": {
     "LANG": "en_US.UTF-8",
     "LC_ALL": "en_US.UTF-8"
-  }
+  },
+  "python-envs.defaultEnvManager": "ms-python.python:venv",
+  "python-envs.defaultPackageManager": "ms-python.python:pip"
 }
