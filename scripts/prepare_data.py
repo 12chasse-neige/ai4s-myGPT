@@ -11,7 +11,7 @@ from typing import Iterable, Mapping
 ROOT = Path(__file__).resolve().parent
 OUTPUT_DIR = ROOT.parent / "outputs"
 DEFAULT_DATASET = "roneneldan/TinyStories"
-DEFAULT_MAX_STORIES = 10_000
+DEFAULT_MAX_STORIES = 100_000
 DEFAULT_OUTPUT = OUTPUT_DIR / "data" / "tinystories.txt"
 
 
@@ -120,6 +120,7 @@ def main() -> None:
         f"wrote {story_count:,} stories ({character_count:,} characters) "
         f"from {source} to {args.output}"
     )
+    quit
 
 
 if __name__ == "__main__":
