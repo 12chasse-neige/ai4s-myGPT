@@ -89,20 +89,24 @@ def write_stories(stories: Iterable[str], output: Path) -> tuple[int, int]:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     parser.add_argument(
         "--input",
         type=Path,
         help="normalize this text file instead of downloading TinyStories",
     )
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument(
+        "--output", type=Path, default=DEFAULT_OUTPUT, help="destination corpus file"
+    )
     parser.add_argument("--dataset", default=DEFAULT_DATASET, help="Hugging Face dataset ID")
     parser.add_argument("--split", default="train", help="Hugging Face dataset split")
     parser.add_argument(
         "--max-stories",
         type=int,
         default=DEFAULT_MAX_STORIES,
-        help=f"maximum stories to stream (default: {DEFAULT_MAX_STORIES:,})",
+        help="maximum stories to stream",
     )
     return parser.parse_args()
 

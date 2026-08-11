@@ -14,10 +14,21 @@ from mygpt.trainer import train
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", type=Path, default=Path("configs/gpt_small.yaml"))
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=Path("configs/gpt_small.yaml"),
+        help="experiment configuration file",
+    )
     parser.add_argument("--data", type=Path, help="override data.path")
-    parser.add_argument("--device", choices=("auto", "cpu", "mps", "cuda"))
+    parser.add_argument(
+        "--device",
+        choices=("auto", "cpu", "mps", "cuda"),
+        help="override training.device",
+    )
     parser.add_argument("--max-steps", type=int, help="override training.max_steps")
     parser.add_argument("--resume", type=Path, help="resume from a checkpoint")
     return parser.parse_args()
@@ -68,4 +79,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

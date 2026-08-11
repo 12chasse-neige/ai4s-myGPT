@@ -15,11 +15,22 @@ from mygpt.trainer import evaluate, select_device
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--checkpoint", type=Path, required=True)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument(
+        "--checkpoint", type=Path, required=True, help="checkpoint to evaluate"
+    )
     parser.add_argument("--data", type=Path, help="override the checkpoint corpus")
-    parser.add_argument("--device", choices=("auto", "cpu", "mps", "cuda"), default="auto")
-    parser.add_argument("--batches", type=int, help="maximum validation batches")
+    parser.add_argument(
+        "--device",
+        choices=("auto", "cpu", "mps", "cuda"),
+        default="auto",
+        help="device used for evaluation",
+    )
+    parser.add_argument(
+        "--batches", type=int, help="maximum validation batches; all when omitted"
+    )
     return parser.parse_args()
 
 
@@ -44,4 +55,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
