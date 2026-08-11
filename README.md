@@ -39,6 +39,9 @@ which keeps this character-level teaching implementation practical.
 # Download and export the default TinyStories subset
 python scripts/prepare_data.py
 
+# Equivalent explicit TinyStories selection
+python scripts/prepare_data.py --tinystories
+
 # A short smoke-training run
 python scripts/train.py --config configs/gpt_small.yaml --max-steps 20
 
@@ -58,6 +61,17 @@ python scripts/prepare_data.py --input path/to/corpus.txt \
 python scripts/train.py --config configs/gpt_small.yaml \
   --data outputs/data/custom.txt
 ```
+
+To fetch the original structured Stanford Alpaca data for later instruction
+tuning, run:
+
+```bash
+python scripts/prepare_data.py --stanford-alpaca
+```
+
+This validates and saves the `instruction`, `input`, and `output` records to
+`outputs/data/stanford_alpaca.json`. The dataset is licensed CC BY-NC 4.0 for
+non-commercial research use.
 
 Use `--max-stories` to change the downloaded TinyStories subset size. The
 upstream dataset has separate train and validation splits; this compact pipeline
