@@ -24,6 +24,8 @@ class CharacterTokenizer:
     """Deterministic character tokenizer with an unknown-character token."""
 
     UNK = "<unk>"
+    EOS = "<eos>"
+    PAD = "<pad>"
 
     def __init__(self, vocabulary: Sequence[str]) -> None:
         unique = list(dict.fromkeys(vocabulary))
@@ -42,16 +44,44 @@ class CharacterTokenizer:
     def vocab_size(self) -> int:
         return len(self.itos)
 
+    @property
+    def eos_id(self) -> int:
+        if self.EOS not in self.stoi:
+            raise ValueError("tokenizer does not define an EOS token")
+        return self.stoi[self.EOS]
+
+    @property
+    def pad_id(self) -> int:
+        if self.PAD not in self.stoi:
+            raise ValueError("tokenizer does not define a padding token")
+        return self.stoi[self.PAD]
+
     def encode(self, text: str) -> list[int]:
         unknown = self.stoi[self.UNK]
         return [self.stoi.get(character, unknown) for character in text]
 
-    def decode(self, token_ids: Sequence[int]) -> str:
+    def decode(
+        self, token_ids: Sequence[int], *, skip_special_tokens: bool = False
+    ) -> str:
         pieces = []
         for token_id in token_ids:
             token = self.itos[int(token_id)]
+            if skip_special_tokens and token in {self.EOS, self.PAD}:
+                continue
             pieces.append("�" if token == self.UNK else token)
         return "".join(pieces)
+
+    def extended(
+        self,
+        characters: Sequence[str],
+        *,
+        add_instruction_tokens: bool = False,
+    ) -> "CharacterTokenizer":
+        """Return a tokenizer with appended tokens while preserving every old ID."""
+        additions = list(characters)
+        if add_instruction_tokens:
+            additions.extend((self.EOS, self.PAD))
+        return CharacterTokenizer([*self.itos, *additions])
 
     def state_dict(self) -> dict[str, list[str]]:
         return {"itos": self.itos}

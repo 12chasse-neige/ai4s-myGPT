@@ -45,6 +45,26 @@ class DataConfig:
 
 
 @dataclass
+class InstructionDataConfig:
+    path: str = "outputs/data/stanford_alpaca.json"
+    train_fraction: float = 0.95
+    batch_size: int = 8
+    num_workers: int = 0
+    max_seq_length: int | None = None
+    max_records: int | None = None
+
+    def validate(self) -> None:
+        if not 0.5 <= self.train_fraction < 1.0:
+            raise ValueError("train_fraction must be in [0.5, 1.0)")
+        if self.batch_size <= 0 or self.num_workers < 0:
+            raise ValueError("batch_size must be positive and num_workers non-negative")
+        if self.max_seq_length is not None and self.max_seq_length <= 1:
+            raise ValueError("max_seq_length must be greater than one")
+        if self.max_records is not None and self.max_records < 2:
+            raise ValueError("max_records must be at least two")
+
+
+@dataclass
 class TrainingConfig:
     seed: int = 42
     max_steps: int = 1000
@@ -105,6 +125,42 @@ class ExperimentConfig:
 
     def validate(self) -> None:
         self.model.validate()
+        self.data.validate()
+        self.training.validate()
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class SFTConfig:
+    pretrained_checkpoint: str = "outputs/gpt-pretrain/best.pt"
+    data: InstructionDataConfig = field(default_factory=InstructionDataConfig)
+    training: TrainingConfig = field(default_factory=TrainingConfig)
+
+    @classmethod
+    def from_dict(cls, values: dict[str, Any]) -> "SFTConfig":
+        config = cls(
+            pretrained_checkpoint=values.get(
+                "pretrained_checkpoint", "outputs/gpt-pretrain/best.pt"
+            ),
+            data=InstructionDataConfig(**values.get("data", {})),
+            training=TrainingConfig(**values.get("training", {})),
+        )
+        config.validate()
+        return config
+
+    @classmethod
+    def from_yaml(cls, path: str | Path) -> "SFTConfig":
+        with Path(path).open("r", encoding="utf-8") as handle:
+            values = yaml.safe_load(handle) or {}
+        if not isinstance(values, dict):
+            raise ValueError("configuration root must be a mapping")
+        return cls.from_dict(values)
+
+    def validate(self) -> None:
+        if not self.pretrained_checkpoint:
+            raise ValueError("pretrained_checkpoint cannot be empty")
         self.data.validate()
         self.training.validate()
 

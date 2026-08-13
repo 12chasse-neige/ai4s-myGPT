@@ -1,0 +1,25 @@
+pretrained_checkpoint: outputs/gpt-pretrain/best.pt
+
+data:
+  path: outputs/data/stanford_alpaca.json
+  train_fraction: 0.95
+  batch_size: 8
+  num_workers: 0
+  max_seq_length: null
+  max_records: null
+
+training:
+  seed: 42
+  max_steps: 6000
+  learning_rate: 0.00003
+  min_learning_rate: 0.000003
+  warmup_steps: 200
+  weight_decay: 0.01
+  beta1: 0.9
+  beta2: 0.95
+  grad_clip: 1.0
+  eval_interval: 250
+  eval_batches: 50
+  log_interval: 20
+  output_dir: outputs/gpt-sft
+  device: auto

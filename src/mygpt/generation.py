@@ -15,6 +15,7 @@ def generate_tokens(
     max_new_tokens: int,
     temperature: float = 0.8,
     top_k: int | None = 40,
+    eos_token_id: int | None = None,
 ) -> torch.Tensor:
     if temperature <= 0:
         raise ValueError("temperature must be positive")
@@ -30,6 +31,8 @@ def generate_tokens(
         probabilities = torch.softmax(logits, dim=-1)
         next_token = torch.multinomial(probabilities, num_samples=1)
         tokens = torch.cat((tokens, next_token), dim=1)
+        if eos_token_id is not None and torch.all(next_token == eos_token_id):
+            break
     return tokens
 
 
@@ -41,10 +44,17 @@ def generate_text(
     temperature: float = 0.8,
     top_k: int | None = 40,
     device: str | torch.device = "cpu",
+    eos_token_id: int | None = None,
 ) -> str:
     if not prompt:
         raise ValueError("prompt cannot be empty")
     tokens = torch.tensor([tokenizer.encode(prompt)], dtype=torch.long, device=device)
-    result = generate_tokens(model, tokens, max_new_tokens, temperature, top_k)
+    result = generate_tokens(
+        model,
+        tokens,
+        max_new_tokens,
+        temperature,
+        top_k,
+        eos_token_id,
+    )
     return tokenizer.decode(result[0].tolist())
-

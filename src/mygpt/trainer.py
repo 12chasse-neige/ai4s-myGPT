@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import random
 import time
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 import torch
@@ -76,6 +76,8 @@ def train(
     start_step: int = 0,
     optimizer_state: dict | None = None,
     best_val_loss: float = math.inf,
+    history: list[dict[str, float]] | None = None,
+    checkpoint_metadata: Mapping[str, object] | None = None,
 ) -> list[dict[str, float]]:
     train_config = config.training
     device = select_device(train_config.device)
@@ -87,7 +89,7 @@ def train(
     output_dir = Path(train_config.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     batches = iter(_infinite_batches(train_loader))
-    history: list[dict[str, float]] = []
+    history = list(history or [])
     started = time.perf_counter()
     model.train()
 
@@ -131,15 +133,18 @@ def train(
             }
             history.append(record)
             print(f"validation step={completed_step} loss={val_loss:.4f}")
-            state = {
-                "model": model.state_dict(),
-                "optimizer": optimizer.state_dict(),
-                "config": config.to_dict(),
-                "tokenizer": tokenizer.state_dict(),
-                "step": completed_step,
-                "best_val_loss": min(best_val_loss, val_loss),
-                "history": history,
-            }
+            state = dict(checkpoint_metadata or {})
+            state.update(
+                {
+                    "model": model.state_dict(),
+                    "optimizer": optimizer.state_dict(),
+                    "config": config.to_dict(),
+                    "tokenizer": tokenizer.state_dict(),
+                    "step": completed_step,
+                    "best_val_loss": min(best_val_loss, val_loss),
+                    "history": history,
+                }
+            )
             save_checkpoint(output_dir / "last.pt", state)
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
@@ -147,4 +152,3 @@ def train(
                 save_checkpoint(output_dir / "best.pt", state)
             model.train()
     return history
-

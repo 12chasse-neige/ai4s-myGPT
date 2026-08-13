@@ -73,6 +73,44 @@ This validates and saves the `instruction`, `input`, and `output` records to
 `outputs/data/stanford_alpaca.json`. The dataset is licensed CC BY-NC 4.0 for
 non-commercial research use.
 
+## Instruction tuning
+
+The instruction-tuning stage starts from a completed myGPT checkpoint, expands
+its character vocabulary without changing any existing token IDs, and trains
+only on response targets. Its sequence length follows the pretrained
+checkpoint, so a future longer-context checkpoint can use the same pipeline.
+
+```bash
+# Full baseline configured in configs/gpt_sft.yaml
+python scripts/instruction_tune.py --config configs/gpt_sft.yaml
+
+# Resume an interrupted SFT run with a larger final step
+python scripts/instruction_tune.py \
+  --resume outputs/gpt-sft/last.pt --max-steps 7000
+
+# Evaluate held-out response loss
+python scripts/evaluate.py --checkpoint outputs/gpt-sft/best.pt
+
+# Generate from the same Stanford Alpaca prompt template used in training
+python scripts/instruct.py \
+  --checkpoint outputs/gpt-sft/best.pt \
+  --instruction "Explain why the sky is blue."
+```
+
+For a short pipeline check without starting the full schedule:
+
+```bash
+python scripts/instruction_tune.py --config configs/gpt_sft.yaml \
+  --device cpu --max-records 64 --max-steps 2 \
+  --output-dir outputs/gpt-sft-smoke
+```
+
+This smoke run verifies data preparation, checkpoint loading, training,
+evaluation, and generation; it is not evidence of instruction-following
+quality. Records with empty responses are skipped. Overlong examples preserve
+the complete instruction, trim optional input first, and then truncate the
+response to the checkpoint context length.
+
 Use `--max-stories` to change the downloaded TinyStories subset size. The
 upstream dataset has separate train and validation splits; this compact pipeline
 streams the requested training stories and applies its configured contiguous

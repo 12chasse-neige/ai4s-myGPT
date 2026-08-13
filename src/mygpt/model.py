@@ -110,10 +110,33 @@ class GPT(nn.Module):
         loss = None
         if targets is not None:
             loss = F.cross_entropy(
-                logits.reshape(-1, logits.size(-1)), targets.reshape(-1)
+                logits.reshape(-1, logits.size(-1)),
+                targets.reshape(-1),
+                ignore_index=-100,
             )
         return logits, loss
 
     def num_parameters(self) -> int:
         return sum(parameter.numel() for parameter in self.parameters())
 
+    def resize_token_embeddings(self, vocab_size: int) -> None:
+        """Expand tied token embeddings while retaining all pretrained rows."""
+        old_size, embedding_size = self.token_embedding.weight.shape
+        if vocab_size < old_size:
+            raise ValueError("cannot shrink token embeddings")
+        if vocab_size == old_size:
+            return
+
+        old_weight = self.token_embedding.weight.detach()
+        replacement = nn.Embedding(vocab_size, embedding_size).to(
+            device=old_weight.device, dtype=old_weight.dtype
+        )
+        nn.init.normal_(replacement.weight, mean=0.0, std=0.02)
+        with torch.no_grad():
+            replacement.weight[:old_size].copy_(old_weight)
+        self.token_embedding = replacement
+        self.lm_head = nn.Linear(embedding_size, vocab_size, bias=False).to(
+            device=old_weight.device, dtype=old_weight.dtype
+        )
+        self.lm_head.weight = self.token_embedding.weight
+        self.config.vocab_size = vocab_size
