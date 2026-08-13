@@ -1,0 +1,35 @@
+# Local 1B-scale pretraining pilot for a 48 GB Apple Silicon Mac.
+# With the current 111-character vocabulary this model has 1,007,992,832
+# parameters. The batch size is intentionally conservative because the trainer
+# currently uses full-precision AdamW without activation checkpointing.
+model:
+  block_size: 512
+  n_layer: 20
+  n_head: 32
+  n_embd: 2048
+  dropout: 0.1
+  bias: false
+
+data:
+  path: outputs/data/tinystories.txt
+  train_fraction: 0.98
+  batch_size: 1
+  num_workers: 0
+
+training:
+  seed: 42
+  # This is a pilot budget (102.4M processed characters), not a complete 1B
+  # pretraining run. Scale data and steps together for a production run.
+  max_steps: 200000
+  learning_rate: 0.0001
+  min_learning_rate: 0.00001
+  warmup_steps: 2000
+  weight_decay: 0.1
+  beta1: 0.9
+  beta2: 0.95
+  grad_clip: 1.0
+  eval_interval: 5000
+  eval_batches: 50
+  log_interval: 20
+  output_dir: outputs/gpt-1b
+  device: auto

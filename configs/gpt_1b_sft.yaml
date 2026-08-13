@@ -1,0 +1,28 @@
+# Supervised fine-tuning for the 1B-scale pretraining preset.
+pretrained_checkpoint: outputs/gpt-1b/best.pt
+
+data:
+  path: outputs/data/stanford_alpaca.json
+  train_fraction: 0.95
+  # Keep the microbatch small enough for the full-precision 1B model.
+  batch_size: 1
+  num_workers: 0
+  max_seq_length: 512
+  max_records: null
+
+training:
+  seed: 42
+  # Roughly one pass over the 52k-record Alpaca dataset at batch size 1.
+  max_steps: 50000
+  learning_rate: 0.00001
+  min_learning_rate: 0.000001
+  warmup_steps: 500
+  weight_decay: 0.01
+  beta1: 0.9
+  beta2: 0.95
+  grad_clip: 1.0
+  eval_interval: 5000
+  eval_batches: 50
+  log_interval: 20
+  output_dir: outputs/gpt-1b-sft
+  device: auto
