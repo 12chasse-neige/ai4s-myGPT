@@ -10,10 +10,10 @@ import torch
 
 from mygpt.checkpoint import load_checkpoint
 from mygpt.config import ExperimentConfig
-from mygpt.data import CharacterTokenizer
 from mygpt.generation import generate_tokens
 from mygpt.instruction import fit_alpaca_prompt
 from mygpt.model import GPT
+from mygpt.tokenizer import BPETokenizer
 from mygpt.trainer import select_device
 
 
@@ -51,12 +51,13 @@ def main() -> None:
     if checkpoint.get("training_stage") != "sft":
         raise ValueError(f"not an SFT checkpoint: {args.checkpoint}")
     config = ExperimentConfig.from_dict(checkpoint["config"])
-    tokenizer = CharacterTokenizer.from_state_dict(checkpoint["tokenizer"])
+    tokenizer = BPETokenizer.from_state_dict(checkpoint["tokenizer"])
     fitted = fit_alpaca_prompt(
         args.instruction,
         args.input,
         config.model.block_size,
         reserve_tokens=0,
+        tokenizer=tokenizer,
     )
     if fitted is None:
         raise ValueError("instruction does not fit the checkpoint context length")

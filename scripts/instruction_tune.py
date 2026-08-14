@@ -9,16 +9,14 @@ from pathlib import Path
 
 from mygpt.checkpoint import load_checkpoint
 from mygpt.config import DataConfig, ExperimentConfig, SFTConfig
-from mygpt.data import CharacterTokenizer
 from mygpt.instruction import (
     PROMPT_TEMPLATE_VERSION,
     build_instruction_dataloaders,
-    instruction_characters,
     load_alpaca_records,
-    missing_instruction_characters,
     split_alpaca_records,
 )
 from mygpt.model import GPT
+from mygpt.tokenizer import BPETokenizer
 from mygpt.trainer import train
 
 
@@ -75,7 +73,7 @@ def apply_overrides(config: SFTConfig, args: argparse.Namespace) -> None:
 
 
 def standard_experiment_config(
-    model_config, sft_config: SFTConfig
+    model_config, tokenizer_config, sft_config: SFTConfig
 ) -> ExperimentConfig:
     return ExperimentConfig(
         model=model_config,
@@ -85,6 +83,7 @@ def standard_experiment_config(
             batch_size=sft_config.data.batch_size,
             num_workers=sft_config.data.num_workers,
         ),
+        tokenizer=tokenizer_config,
         training=sft_config.training,
     )
 
@@ -115,7 +114,7 @@ def main() -> None:
         optimizer_state = checkpoint.get("optimizer")
         best_val_loss = float(checkpoint.get("best_val_loss", float("inf")))
         history = list(checkpoint.get("history", []))
-        tokenizer = CharacterTokenizer.from_state_dict(checkpoint["tokenizer"])
+        tokenizer = BPETokenizer.from_state_dict(checkpoint["tokenizer"])
         experiment_config = ExperimentConfig.from_dict(checkpoint["config"])
         experiment_config.training = sft_config.training
         model = GPT(experiment_config.model)
@@ -132,7 +131,7 @@ def main() -> None:
         if checkpoint.get("training_stage") == "sft":
             raise ValueError("use --resume for an SFT checkpoint")
         pretrained_config = ExperimentConfig.from_dict(checkpoint["config"])
-        tokenizer = CharacterTokenizer.from_state_dict(checkpoint["tokenizer"])
+        tokenizer = BPETokenizer.from_state_dict(checkpoint["tokenizer"])
         source_checkpoint = str(source_path)
         source_step = int(checkpoint.get("step", 0))
         model = GPT(pretrained_config.model)
@@ -145,23 +144,11 @@ def main() -> None:
         sft_config.training.seed,
         sft_config.data.max_records,
     )
-    selected_records = [*train_records, *validation_records]
-
-    if args.resume:
-        missing = missing_instruction_characters(selected_records, tokenizer)
-        if missing:
-            raise ValueError(
-                "resume dataset contains characters absent from the saved tokenizer; "
-                "start a new SFT run instead"
-            )
-    else:
-        old_tokens = set(tokenizer.itos)
-        tokenizer = tokenizer.extended(
-            instruction_characters(selected_records), add_instruction_tokens=True
+    if not args.resume:
+        added_tokens = []
+        experiment_config = standard_experiment_config(
+            model.config, pretrained_config.tokenizer, sft_config
         )
-        added_tokens = [token for token in tokenizer.itos if token not in old_tokens]
-        model.resize_token_embeddings(tokenizer.vocab_size)
-        experiment_config = standard_experiment_config(model.config, sft_config)
 
     experiment_config.model.vocab_size = tokenizer.vocab_size
     experiment_config.data.path = sft_config.data.path

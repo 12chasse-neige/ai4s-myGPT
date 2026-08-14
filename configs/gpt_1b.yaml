@@ -1,5 +1,5 @@
 # Local 1B-scale pretraining pilot for a 48 GB Apple Silicon Mac.
-# With the current 111-character vocabulary this model has 1,007,992,832
+# With the configured 10,000-token BPE vocabulary this model has 1,028,245,504
 # parameters. The batch size is intentionally conservative because the trainer
 # currently uses full-precision AdamW without activation checkpointing.
 model:
@@ -16,6 +16,12 @@ data:
   batch_size: 1
   num_workers: 0
 
+tokenizer:
+  type: bpe
+  path: outputs/tokenizers/tinystories-10k.json
+  vocab_size: 10000
+  min_frequency: 2
+
 training:
   seed: 42
   # This is a pilot budget (102.4M processed characters), not a complete 1B
@@ -31,5 +37,5 @@ training:
   eval_interval: 5000
   eval_batches: 50
   log_interval: 20
-  output_dir: outputs/gpt-1b
+  output_dir: outputs/gpt-1b-bpe
   device: auto

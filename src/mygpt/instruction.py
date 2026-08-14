@@ -13,7 +13,7 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 
 from .config import InstructionDataConfig
-from .data import CharacterTokenizer
+from .tokenizer import BPETokenizer
 
 IGNORE_INDEX = -100
 PROMPT_TEMPLATE_VERSION = "stanford_alpaca_v1"
@@ -81,25 +81,6 @@ def split_alpaca_records(
     return train, validation
 
 
-def instruction_characters(records: Sequence[dict[str, str]]) -> list[str]:
-    """Return sorted characters needed to encode a collection of records."""
-    characters: set[str] = set()
-    for record in records:
-        characters.update(format_alpaca_prompt(record["instruction"], record["input"]))
-        characters.update(normalize_field(record["output"]))
-    return sorted(characters)
-
-
-def missing_instruction_characters(
-    records: Sequence[dict[str, str]], tokenizer: CharacterTokenizer
-) -> list[str]:
-    return [
-        character
-        for character in instruction_characters(records)
-        if character not in tokenizer.stoi
-    ]
-
-
 @dataclass
 class InstructionStats:
     total_records: int = 0
@@ -126,32 +107,44 @@ def fit_alpaca_prompt(
     input_text: str,
     max_length: int,
     *,
+    tokenizer: BPETokenizer,
     reserve_tokens: int = 1,
 ) -> tuple[str, bool] | None:
     """Fit a complete instruction by trimming or removing optional input."""
     instruction = normalize_field(instruction)
     input_text = normalize_field(input_text)
+
+    def measure(text: str) -> int:
+        return len(tokenizer.encode(text))
+
     minimal_prompt = format_alpaca_prompt(instruction)
-    if len(minimal_prompt) + reserve_tokens > max_length:
+    if measure(minimal_prompt) + reserve_tokens > max_length:
         return None
     if not input_text:
         return minimal_prompt, False
 
     complete_prompt = format_alpaca_prompt(instruction, input_text)
-    if len(complete_prompt) + reserve_tokens <= max_length:
+    if measure(complete_prompt) + reserve_tokens <= max_length:
         return complete_prompt, False
 
     input_prefix, input_suffix = PROMPT_WITH_INPUT.split("{input}")
     fixed_prefix = input_prefix.format(instruction=instruction)
-    available = max_length - reserve_tokens - len(fixed_prefix) - len(input_suffix)
-    if available <= 0:
+    low, high = 0, len(input_text)
+    while low < high:
+        middle = (low + high + 1) // 2
+        candidate = fixed_prefix + input_text[:middle] + input_suffix
+        if measure(candidate) + reserve_tokens <= max_length:
+            low = middle
+        else:
+            high = middle - 1
+    if low == 0:
         return minimal_prompt, True
-    return fixed_prefix + input_text[:available] + input_suffix, True
+    return fixed_prefix + input_text[:low] + input_suffix, True
 
 
 def encode_alpaca_record(
     record: Mapping[str, str],
-    tokenizer: CharacterTokenizer,
+    tokenizer: BPETokenizer,
     max_length: int,
 ) -> EncodedInstruction | None:
     """Encode one record with prompt masking and response-preserving truncation."""
@@ -159,7 +152,11 @@ def encode_alpaca_record(
     if not response:
         return None
     fitted = fit_alpaca_prompt(
-        record["instruction"], record["input"], max_length, reserve_tokens=1
+        record["instruction"],
+        record["input"],
+        max_length,
+        reserve_tokens=1,
+        tokenizer=tokenizer,
     )
     if fitted is None:
         return None
@@ -187,7 +184,7 @@ class InstructionDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
     def __init__(
         self,
         records: Sequence[dict[str, str]],
-        tokenizer: CharacterTokenizer,
+        tokenizer: BPETokenizer,
         max_length: int,
     ) -> None:
         self.samples: list[EncodedInstruction] = []
@@ -233,7 +230,7 @@ def collate_instruction_batch(
 def build_instruction_dataloaders(
     train_records: Sequence[dict[str, str]],
     validation_records: Sequence[dict[str, str]],
-    tokenizer: CharacterTokenizer,
+    tokenizer: BPETokenizer,
     block_size: int,
     config: InstructionDataConfig,
     seed: int,

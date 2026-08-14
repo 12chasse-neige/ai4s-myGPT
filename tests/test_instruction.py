@@ -2,7 +2,6 @@ import unittest
 
 import torch
 
-from mygpt.data import CharacterTokenizer
 from mygpt.generation import generate_tokens
 from mygpt.instruction import (
     IGNORE_INDEX,
@@ -11,20 +10,21 @@ from mygpt.instruction import (
     encode_alpaca_record,
     fit_alpaca_prompt,
     format_alpaca_prompt,
-    instruction_characters,
     split_alpaca_records,
 )
+from mygpt.tokenizer import BPETokenizer
 
 
 def record(instruction: str, input_text: str, output: str) -> dict[str, str]:
     return {"instruction": instruction, "input": input_text, "output": output}
 
 
-def instruction_tokenizer(records: list[dict[str, str]]) -> CharacterTokenizer:
-    tokenizer = CharacterTokenizer.from_text("pretraining text\n")
-    return tokenizer.extended(
-        instruction_characters(records), add_instruction_tokens=True
-    )
+def instruction_tokenizer(records: list[dict[str, str]]) -> BPETokenizer:
+    texts = ["pretraining text\n<eos>\n"]
+    for item in records:
+        texts.append(format_alpaca_prompt(item["instruction"], item["input"]))
+        texts.append(item["output"])
+    return BPETokenizer.train_from_iterator(texts)
 
 
 class InstructionDataTest(unittest.TestCase):
@@ -49,13 +49,10 @@ class InstructionDataTest(unittest.TestCase):
             )
         )
 
-    def test_tokenizer_expansion_preserves_ids_and_adds_special_tokens(self) -> None:
-        tokenizer = CharacterTokenizer.from_text("abc")
-        old_ids = dict(tokenizer.stoi)
-        expanded = tokenizer.extended(["c", "é"], add_instruction_tokens=True)
-        self.assertEqual({token: expanded.stoi[token] for token in old_ids}, old_ids)
-        self.assertEqual(expanded.decode(expanded.encode("é")), "é")
-        self.assertNotEqual(expanded.eos_id, expanded.pad_id)
+    def test_bpe_tokenizer_needs_no_sft_vocabulary_expansion(self) -> None:
+        tokenizer = instruction_tokenizer([record("Say café.", "", "Déjà vu.")])
+        self.assertEqual(tokenizer.decode(tokenizer.encode("新しい café")), "新しい café")
+        self.assertNotEqual(tokenizer.eos_id, tokenizer.pad_id)
 
     def test_response_only_targets_are_shifted_and_end_with_eos(self) -> None:
         example = record("Add.", "2 + 2", "4")
@@ -64,14 +61,18 @@ class InstructionDataTest(unittest.TestCase):
         assert encoded is not None
         prompt_length = len(tokenizer.encode(format_alpaca_prompt("Add.", "2 + 2")))
         self.assertTrue(torch.all(encoded.targets[: prompt_length - 1] == IGNORE_INDEX))
-        self.assertEqual(encoded.targets[prompt_length - 1].item(), tokenizer.stoi["4"])
+        self.assertEqual(
+            encoded.targets[prompt_length - 1].item(), tokenizer.encode("4")[0]
+        )
         self.assertEqual(encoded.targets[-1].item(), tokenizer.eos_id)
         self.assertEqual(len(encoded.tokens), len(encoded.targets))
 
     def test_input_then_response_are_truncated_to_checkpoint_length(self) -> None:
         example = record("Answer briefly.", "context " * 100, "response " * 100)
         tokenizer = instruction_tokenizer([example])
-        minimal_length = len(format_alpaca_prompt(example["instruction"]))
+        minimal_length = len(
+            tokenizer.encode(format_alpaca_prompt(example["instruction"]))
+        )
         max_length = minimal_length + 5
         encoded = encode_alpaca_record(example, tokenizer, max_length)
         assert encoded is not None
@@ -83,7 +84,7 @@ class InstructionDataTest(unittest.TestCase):
         records = [
             record("valid", "", "answer"),
             record("empty", "", ""),
-            record("x" * 1000, "", "answer"),
+            record("word " * 1000, "", "answer"),
         ]
         tokenizer = instruction_tokenizer(records)
         dataset = InstructionDataset(records, tokenizer, max_length=180)
@@ -105,7 +106,29 @@ class InstructionDataTest(unittest.TestCase):
         self.assertTrue(torch.all(targets[0, short_length:] == IGNORE_INDEX))
 
     def test_prompt_that_cannot_fit_is_rejected(self) -> None:
-        self.assertIsNone(fit_alpaca_prompt("x" * 1000, "", max_length=100))
+        tokenizer = instruction_tokenizer([record("short", "", "answer")])
+        self.assertIsNone(
+            fit_alpaca_prompt(
+                "word " * 1000,
+                "",
+                max_length=100,
+                tokenizer=tokenizer,
+            )
+        )
+
+    def test_prompt_fitting_uses_bpe_token_lengths(self) -> None:
+        example = record("Summarize.", "context " * 100, "answer")
+        tokenizer = instruction_tokenizer([example])
+        fitted = fit_alpaca_prompt(
+            example["instruction"],
+            example["input"],
+            max_length=40,
+            tokenizer=tokenizer,
+        )
+        assert fitted is not None
+        prompt, truncated = fitted
+        self.assertTrue(truncated)
+        self.assertLessEqual(len(tokenizer.encode(prompt)) + 1, 40)
 
 
 class AlwaysEosModel:

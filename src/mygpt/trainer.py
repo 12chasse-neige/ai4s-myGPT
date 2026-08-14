@@ -13,9 +13,9 @@ from torch.utils.data import DataLoader
 
 from .checkpoint import save_checkpoint
 from .config import ExperimentConfig
-from .data import CharacterTokenizer
 from .model import GPT
 from .optim import build_optimizer, learning_rate_at_step
+from .tokenizer import BPETokenizer
 
 
 def select_device(requested: str) -> torch.device:
@@ -70,7 +70,7 @@ def train(
     model: GPT,
     train_loader: DataLoader,
     val_loader: DataLoader,
-    tokenizer: CharacterTokenizer,
+    tokenizer: BPETokenizer,
     config: ExperimentConfig,
     *,
     start_step: int = 0,

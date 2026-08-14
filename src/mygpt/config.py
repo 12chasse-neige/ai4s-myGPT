@@ -45,6 +45,24 @@ class DataConfig:
 
 
 @dataclass
+class TokenizerConfig:
+    type: str = "bpe"
+    path: str = "outputs/tokenizers/tinystories-10k.json"
+    vocab_size: int = 10_000
+    min_frequency: int = 2
+
+    def validate(self) -> None:
+        if self.type != "bpe":
+            raise ValueError("tokenizer.type must be bpe")
+        if not self.path:
+            raise ValueError("tokenizer.path is required for BPE")
+        if self.vocab_size <= 260:
+            raise ValueError("tokenizer.vocab_size must exceed the byte alphabet")
+        if self.min_frequency <= 0:
+            raise ValueError("tokenizer.min_frequency must be positive")
+
+
+@dataclass
 class InstructionDataConfig:
     path: str = "outputs/data/stanford_alpaca.json"
     train_fraction: float = 0.95
@@ -103,6 +121,7 @@ class TrainingConfig:
 class ExperimentConfig:
     model: ModelConfig = field(default_factory=ModelConfig)
     data: DataConfig = field(default_factory=DataConfig)
+    tokenizer: TokenizerConfig = field(default_factory=TokenizerConfig)
     training: TrainingConfig = field(default_factory=TrainingConfig)
 
     @classmethod
@@ -110,6 +129,7 @@ class ExperimentConfig:
         config = cls(
             model=ModelConfig(**values.get("model", {})),
             data=DataConfig(**values.get("data", {})),
+            tokenizer=TokenizerConfig(**values.get("tokenizer", {})),
             training=TrainingConfig(**values.get("training", {})),
         )
         config.validate()
@@ -126,6 +146,7 @@ class ExperimentConfig:
     def validate(self) -> None:
         self.model.validate()
         self.data.validate()
+        self.tokenizer.validate()
         self.training.validate()
 
     def to_dict(self) -> dict[str, Any]:

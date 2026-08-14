@@ -9,14 +9,14 @@ from pathlib import Path
 
 from mygpt.checkpoint import load_checkpoint
 from mygpt.config import ExperimentConfig, SFTConfig
-from mygpt.data import CharacterTokenizer, build_dataloaders, load_text
+from mygpt.data import build_dataloaders, load_text
 from mygpt.instruction import (
     build_instruction_dataloaders,
     load_alpaca_records,
-    missing_instruction_characters,
     split_alpaca_records,
 )
 from mygpt.model import GPT
+from mygpt.tokenizer import BPETokenizer
 from mygpt.trainer import evaluate, select_device
 
 
@@ -45,7 +45,7 @@ def main() -> None:
     checkpoint = load_checkpoint(args.checkpoint)
     config = ExperimentConfig.from_dict(checkpoint["config"])
     config.training.device = args.device
-    tokenizer = CharacterTokenizer.from_state_dict(checkpoint["tokenizer"])
+    tokenizer = BPETokenizer.from_state_dict(checkpoint["tokenizer"])
     if checkpoint.get("training_stage") == "sft":
         if "sft_config" not in checkpoint:
             raise ValueError("SFT checkpoint has no saved configuration")
@@ -59,14 +59,6 @@ def main() -> None:
             sft_config.training.seed,
             sft_config.data.max_records,
         )
-        missing = missing_instruction_characters(
-            [*train_records, *validation_records], tokenizer
-        )
-        if missing:
-            raise ValueError(
-                f"evaluation data contains {len(missing)} characters absent from "
-                "the checkpoint tokenizer"
-            )
         _, val_loader, _ = build_instruction_dataloaders(
             train_records,
             validation_records,

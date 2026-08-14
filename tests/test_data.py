@@ -4,15 +4,22 @@ from tempfile import TemporaryDirectory
 
 import torch
 
-from mygpt.data import CharacterTokenizer, TokenDataset, load_text
+from mygpt.data import TokenDataset, load_text
+from mygpt.tokenizer import BPETokenizer
 
 
 class DataTest(unittest.TestCase):
-    def test_tokenizer_round_trip(self) -> None:
-        text = "abc cab"
-        tokenizer = CharacterTokenizer.from_text(text)
+    def test_bpe_tokenizer_round_trip_and_special_tokens(self) -> None:
+        text = "abc cab élan <eos>"
+        tokenizer = BPETokenizer.train_from_iterator([text])
         self.assertEqual(tokenizer.decode(tokenizer.encode(text)), text)
-        self.assertEqual(tokenizer.decode(tokenizer.encode("?")), "�")
+        self.assertIn(tokenizer.eos_id, tokenizer.encode(text))
+        restored = BPETokenizer.from_state_dict(tokenizer.state_dict())
+        self.assertEqual(restored.encode(text), tokenizer.encode(text))
+        self.assertEqual(
+            restored.decode(restored.encode(text), skip_special_tokens=True),
+            "abc cab élan ",
+        )
 
     def test_dataset_is_shifted_by_one_token(self) -> None:
         dataset = TokenDataset([1, 2, 3, 4, 5], block_size=3)

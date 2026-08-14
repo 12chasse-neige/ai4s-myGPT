@@ -1,4 +1,4 @@
-pretrained_checkpoint: outputs/gpt-pretrain/best.pt
+pretrained_checkpoint: outputs/gpt-pretrain-bpe/best.pt
 
 data:
   path: outputs/data/stanford_alpaca.json
@@ -21,5 +21,5 @@ training:
   eval_interval: 250
   eval_batches: 50
   log_interval: 20
-  output_dir: outputs/gpt-sft
+  output_dir: outputs/gpt-sft-bpe
   device: auto

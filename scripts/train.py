@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Train a character-level GPT model."""
+"""Train a BPE-tokenized GPT model."""
 
 from __future__ import annotations
 
@@ -8,8 +8,9 @@ from pathlib import Path
 
 from mygpt.checkpoint import load_checkpoint
 from mygpt.config import ExperimentConfig
-from mygpt.data import CharacterTokenizer, build_dataloaders, load_text
+from mygpt.data import build_dataloaders, load_text
 from mygpt.model import GPT
+from mygpt.tokenizer import BPETokenizer, EOS_TOKEN
 from mygpt.trainer import train
 
 
@@ -43,17 +44,38 @@ def main() -> None:
         config.training.device = args.device
     if args.max_steps is not None:
         config.training.max_steps = args.max_steps
-        config.training.warmup_steps = min(config.training.warmup_steps, max(0, args.max_steps - 1))
+        config.training.warmup_steps = min(
+            config.training.warmup_steps, max(0, args.max_steps - 1)
+        )
     config.validate()
 
     text = load_text(config.data.path)
     start_step, optimizer_state, best_val_loss = 0, None, float("inf")
     if args.resume:
         checkpoint = load_checkpoint(args.resume)
-        tokenizer = CharacterTokenizer.from_state_dict(checkpoint["tokenizer"])
+        tokenizer = BPETokenizer.from_state_dict(checkpoint["tokenizer"])
     else:
         checkpoint = None
-        tokenizer = CharacterTokenizer.from_text(text)
+        if EOS_TOKEN not in text:
+            raise ValueError(
+                f"training corpus has no {EOS_TOKEN} story boundaries; regenerate it "
+                "with `python scripts/prepare_data.py --tinystories`"
+            )
+        tokenizer_path = Path(config.tokenizer.path)
+        if tokenizer_path.is_file():
+            tokenizer = BPETokenizer.from_file(tokenizer_path)
+            print(f"loaded BPE tokenizer from {tokenizer_path}")
+        else:
+            tokenizer = BPETokenizer.train(
+                [Path(config.data.path)],
+                vocab_size=config.tokenizer.vocab_size,
+                min_frequency=config.tokenizer.min_frequency,
+            )
+            tokenizer.save(tokenizer_path)
+            print(
+                f"trained BPE tokenizer vocabulary={tokenizer.vocab_size} "
+                f"and saved it to {tokenizer_path}"
+            )
     config.model.vocab_size = tokenizer.vocab_size
     train_loader, val_loader = build_dataloaders(
         text, tokenizer, config.model.block_size, config.data, config.training.seed

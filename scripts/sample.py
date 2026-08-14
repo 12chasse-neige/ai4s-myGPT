@@ -10,9 +10,9 @@ import torch
 
 from mygpt.checkpoint import load_checkpoint
 from mygpt.config import ExperimentConfig
-from mygpt.data import CharacterTokenizer
 from mygpt.generation import generate_text
 from mygpt.model import GPT
+from mygpt.tokenizer import BPETokenizer
 from mygpt.trainer import select_device
 
 
@@ -49,7 +49,7 @@ def main() -> None:
     device = select_device(args.device)
     checkpoint = load_checkpoint(args.checkpoint, device)
     config = ExperimentConfig.from_dict(checkpoint["config"])
-    tokenizer = CharacterTokenizer.from_state_dict(checkpoint["tokenizer"])
+    tokenizer = BPETokenizer.from_state_dict(checkpoint["tokenizer"])
     model = GPT(config.model).to(device)
     model.load_state_dict(checkpoint["model"])
     text = generate_text(
@@ -60,6 +60,7 @@ def main() -> None:
         args.temperature,
         args.top_k,
         device,
+        tokenizer.eos_id,
     )
     print(text)
 

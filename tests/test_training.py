@@ -6,8 +6,9 @@ import torch
 
 from mygpt.checkpoint import load_checkpoint
 from mygpt.config import DataConfig, ExperimentConfig, ModelConfig, TrainingConfig
-from mygpt.data import CharacterTokenizer, build_dataloaders
+from mygpt.data import build_dataloaders
 from mygpt.model import GPT
+from mygpt.tokenizer import BPETokenizer
 from mygpt.trainer import train
 
 
@@ -15,8 +16,8 @@ class TrainingTest(unittest.TestCase):
     def test_one_step_training_and_checkpoint(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             tmp_path = Path(directory)
-            text = "a small training example.\n" * 30
-            tokenizer = CharacterTokenizer.from_text(text)
+            text = "a small training example.\n<eos>\n" * 30
+            tokenizer = BPETokenizer.train_from_iterator([text])
             config = ExperimentConfig(
                 model=ModelConfig(
                     vocab_size=tokenizer.vocab_size,
@@ -55,8 +56,8 @@ class TrainingTest(unittest.TestCase):
     def test_stage_metadata_and_optimizer_resume_are_preserved(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             tmp_path = Path(directory)
-            text = "instruction tuning example.\n" * 30
-            tokenizer = CharacterTokenizer.from_text(text)
+            text = "instruction tuning example.\n<eos>\n" * 30
+            tokenizer = BPETokenizer.train_from_iterator([text])
             config = ExperimentConfig(
                 model=ModelConfig(
                     vocab_size=tokenizer.vocab_size,

@@ -18,15 +18,18 @@ class PrepareDataTest(unittest.TestCase):
     def test_tinystories_is_the_default_source(self) -> None:
         with patch("sys.argv", ["prepare_data.py"]):
             args = prepare_data.parse_args()
-        self.assertTrue(args.tinystories)
+        self.assertEqual(args.source, "tinystories")
 
-    def test_source_flags_select_tinystories_or_stanford_alpaca(self) -> None:
-        with patch("sys.argv", ["prepare_data.py", "--tinystories"]):
-            tinystories_args = prepare_data.parse_args()
-        with patch("sys.argv", ["prepare_data.py", "--stanford-alpaca"]):
-            alpaca_args = prepare_data.parse_args()
-        self.assertTrue(tinystories_args.tinystories)
-        self.assertFalse(alpaca_args.tinystories)
+    def test_source_flags_select_each_supported_dataset(self) -> None:
+        expected_sources = {
+            "--tinystories": "tinystories",
+            "--stanford-alpaca": "stanford-alpaca",
+            "--wikitext": "wikitext",
+            "--mmlu": "mmlu",
+        }
+        for flag, expected in expected_sources.items():
+            with self.subTest(flag=flag), patch("sys.argv", ["prepare_data.py", flag]):
+                self.assertEqual(prepare_data.parse_args().source, expected)
 
     def test_write_stories_normalizes_and_separates_records(self) -> None:
         with TemporaryDirectory() as directory:
@@ -34,7 +37,7 @@ class PrepareDataTest(unittest.TestCase):
             count, characters = prepare_data.write_stories(
                 [" First story.\r\n", "", "Second story.  "], output
             )
-            expected = "First story.\n\nSecond story.\n"
+            expected = "First story.\n<eos>\nSecond story.\n<eos>\n"
             self.assertEqual(output.read_text(encoding="utf-8"), expected)
             self.assertEqual(count, 2)
             self.assertEqual(characters, len(expected))
@@ -93,6 +96,72 @@ class PrepareDataTest(unittest.TestCase):
             self.assertEqual(count, 1)
             self.assertEqual(byte_count, len(payload))
             self.assertEqual(json.loads(output.read_text(encoding="utf-8")), records)
+
+    def test_fetch_wikitext_preserves_raw_line_structure(self) -> None:
+        records = [
+            {"text": ""},
+            {"text": " = Article = \r\n"},
+            {"text": ""},
+            {"text": " Article body. \n"},
+        ]
+        with TemporaryDirectory() as directory:
+            output = Path(directory) / "wikitext.txt"
+            with patch.object(
+                prepare_data, "load_huggingface_split", return_value=records
+            ) as load_split:
+                count, characters = prepare_data.fetch_wikitext(output)
+            expected = "\n = Article = \n\n Article body. \n"
+            self.assertEqual(output.read_text(encoding="utf-8"), expected)
+            self.assertEqual(count, 4)
+            self.assertEqual(characters, len(expected))
+            load_split.assert_called_once_with(
+                prepare_data.DEFAULT_WIKITEXT_DATASET,
+                prepare_data.DEFAULT_WIKITEXT_SPLIT,
+                prepare_data.DEFAULT_WIKITEXT_CONFIG,
+            )
+
+    def test_fetch_mmlu_writes_valid_structured_json(self) -> None:
+        records = [
+            {
+                "question": "What is 2 + 3?",
+                "subject": "elementary_mathematics",
+                "choices": ["4", "5", "6", "7"],
+                "answer": 1,
+            }
+        ]
+        with TemporaryDirectory() as directory:
+            output = Path(directory) / "mmlu.json"
+            with patch.object(
+                prepare_data, "load_huggingface_split", return_value=records
+            ) as load_split:
+                count, byte_count = prepare_data.fetch_mmlu(output)
+            self.assertEqual(count, 1)
+            self.assertEqual(byte_count, output.stat().st_size)
+            self.assertEqual(json.loads(output.read_text(encoding="utf-8")), records)
+            load_split.assert_called_once_with(
+                prepare_data.DEFAULT_MMLU_DATASET,
+                prepare_data.DEFAULT_MMLU_SPLIT,
+                prepare_data.DEFAULT_MMLU_CONFIG,
+            )
+
+    def test_invalid_mmlu_does_not_replace_existing_file(self) -> None:
+        records = [
+            {
+                "question": "Broken question",
+                "subject": "test",
+                "choices": ["A", "B"],
+                "answer": 0,
+            }
+        ]
+        with TemporaryDirectory() as directory:
+            output = Path(directory) / "mmlu.json"
+            output.write_text("keep me", encoding="utf-8")
+            with patch.object(
+                prepare_data, "load_huggingface_split", return_value=records
+            ):
+                with self.assertRaisesRegex(ValueError, "four string choices"):
+                    prepare_data.fetch_mmlu(output)
+            self.assertEqual(output.read_text(encoding="utf-8"), "keep me")
 
 
 if __name__ == "__main__":

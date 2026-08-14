@@ -12,6 +12,12 @@ data:
   batch_size: 4
   num_workers: 0
 
+tokenizer:
+  type: bpe
+  path: outputs/tokenizers/tinystories-10k.json
+  vocab_size: 10000
+  min_frequency: 2
+
 training:
   seed: 42
   max_steps: 80000
@@ -25,5 +31,5 @@ training:
   eval_interval: 1000
   eval_batches: 100
   log_interval: 20
-  output_dir: outputs/gpt-pretrain
+  output_dir: outputs/gpt-pretrain-bpe
   device: auto

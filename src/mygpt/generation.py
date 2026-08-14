@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import torch
 
-from .data import CharacterTokenizer
 from .model import GPT
+from .tokenizer import BPETokenizer
 
 
 @torch.no_grad()
@@ -38,7 +38,7 @@ def generate_tokens(
 
 def generate_text(
     model: GPT,
-    tokenizer: CharacterTokenizer,
+    tokenizer: BPETokenizer,
     prompt: str,
     max_new_tokens: int = 100,
     temperature: float = 0.8,
@@ -57,4 +57,4 @@ def generate_text(
         top_k,
         eos_token_id,
     )
-    return tokenizer.decode(result[0].tolist())
+    return tokenizer.decode(result[0].tolist(), skip_special_tokens=True)
