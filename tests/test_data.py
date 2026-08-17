@@ -1,10 +1,11 @@
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 import torch
 
-from mygpt.data import TokenDataset, load_text
+from mygpt.data import TokenDataset, load_text, prepare_token_cache
 from mygpt.tokenizer import BPETokenizer
 
 
@@ -32,3 +33,51 @@ class DataTest(unittest.TestCase):
             missing = Path(directory) / "tinystories.txt"
             with self.assertRaisesRegex(FileNotFoundError, "prepare_data.py"):
                 load_text(missing)
+
+    def test_chunked_token_cache_matches_full_bpe_encoding(self) -> None:
+        text = (
+            "Élan found a red ball.\n<eos>\n\n"
+            "Once upon a time, a cat went home.\n<eos>\n"
+        ) * 20
+        with TemporaryDirectory() as directory:
+            corpus = Path(directory) / "stories.txt"
+            corpus.write_text(text, encoding="utf-8")
+            tokenizer = BPETokenizer.train_from_iterator(
+                [text], vocab_size=512, min_frequency=1
+            )
+            with (
+                patch("mygpt.data.TOKENIZE_CHUNK_BYTES", 17),
+                patch("mygpt.data.TOKENIZE_PROGRESS_BYTES", 10**9),
+            ):
+                cache, metadata = prepare_token_cache(corpus, tokenizer)
+
+            mapped = torch.from_file(
+                str(cache),
+                shared=False,
+                size=int(metadata["token_count"]),
+                dtype=torch.uint16,
+            )
+            self.assertEqual(mapped.long().tolist(), tokenizer.encode(text))
+
+    def test_token_cache_is_reused_and_invalidated_with_the_corpus(self) -> None:
+        text = "A little cat went home.\n<eos>\n" * 20
+        with TemporaryDirectory() as directory:
+            corpus = Path(directory) / "stories.txt"
+            corpus.write_text(text, encoding="utf-8")
+            tokenizer = BPETokenizer.train_from_iterator(
+                [text], vocab_size=512, min_frequency=1
+            )
+            cache, first = prepare_token_cache(corpus, tokenizer)
+
+            with patch(
+                "mygpt.data._encode_chunks",
+                side_effect=AssertionError("valid cache should be reused"),
+            ):
+                reused_cache, reused = prepare_token_cache(corpus, tokenizer)
+            self.assertEqual(reused_cache, cache)
+            self.assertEqual(reused, first)
+
+            corpus.write_text(text + "A dog arrived.\n<eos>\n", encoding="utf-8")
+            _, updated = prepare_token_cache(corpus, tokenizer)
+            self.assertNotEqual(updated["source_size"], first["source_size"])
+            self.assertGreater(updated["token_count"], first["token_count"])

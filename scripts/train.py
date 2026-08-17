@@ -8,7 +8,13 @@ from pathlib import Path
 
 from mygpt.checkpoint import load_checkpoint
 from mygpt.config import ExperimentConfig
-from mygpt.data import build_dataloaders, load_text
+from mygpt.data import (
+    build_dataloaders,
+    build_file_dataloaders,
+    load_text,
+    text_file_contains,
+    validate_text_file,
+)
 from mygpt.model import GPT
 from mygpt.tokenizer import BPETokenizer, EOS_TOKEN
 from mygpt.trainer import train
@@ -49,14 +55,24 @@ def main() -> None:
         )
     config.validate()
 
-    text = load_text(config.data.path)
+    if config.data.path is None:
+        text = load_text(None)
+        corpus_path = None
+    else:
+        text = None
+        corpus_path = validate_text_file(config.data.path)
     start_step, optimizer_state, best_val_loss = 0, None, float("inf")
     if args.resume:
         checkpoint = load_checkpoint(args.resume)
         tokenizer = BPETokenizer.from_state_dict(checkpoint["tokenizer"])
     else:
         checkpoint = None
-        if EOS_TOKEN not in text:
+        has_eos = (
+            EOS_TOKEN in text
+            if text is not None
+            else text_file_contains(corpus_path, EOS_TOKEN)
+        )
+        if not has_eos:
             raise ValueError(
                 f"training corpus has no {EOS_TOKEN} story boundaries; regenerate it "
                 "with `python scripts/prepare_data.py --tinystories`"
@@ -66,20 +82,37 @@ def main() -> None:
             tokenizer = BPETokenizer.from_file(tokenizer_path)
             print(f"loaded BPE tokenizer from {tokenizer_path}")
         else:
-            tokenizer = BPETokenizer.train(
-                [Path(config.data.path)],
-                vocab_size=config.tokenizer.vocab_size,
-                min_frequency=config.tokenizer.min_frequency,
-            )
+            if corpus_path is None:
+                tokenizer = BPETokenizer.train_from_iterator(
+                    [text],
+                    vocab_size=config.tokenizer.vocab_size,
+                    min_frequency=config.tokenizer.min_frequency,
+                )
+            else:
+                tokenizer = BPETokenizer.train(
+                    [corpus_path],
+                    vocab_size=config.tokenizer.vocab_size,
+                    min_frequency=config.tokenizer.min_frequency,
+                )
             tokenizer.save(tokenizer_path)
             print(
                 f"trained BPE tokenizer vocabulary={tokenizer.vocab_size} "
                 f"and saved it to {tokenizer_path}"
             )
     config.model.vocab_size = tokenizer.vocab_size
-    train_loader, val_loader = build_dataloaders(
-        text, tokenizer, config.model.block_size, config.data, config.training.seed
-    )
+    if corpus_path is None:
+        assert text is not None
+        train_loader, val_loader = build_dataloaders(
+            text, tokenizer, config.model.block_size, config.data, config.training.seed
+        )
+    else:
+        train_loader, val_loader = build_file_dataloaders(
+            corpus_path,
+            tokenizer,
+            config.model.block_size,
+            config.data,
+            config.training.seed,
+        )
     model = GPT(config.model)
     if checkpoint:
         model.load_state_dict(checkpoint["model"])

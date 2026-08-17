@@ -37,6 +37,11 @@ by default and writes an explicit `<eos>` boundary after every story. On the
 first fresh run, training learns and saves a 10,000-token byte-level BPE
 tokenizer at `outputs/tokenizers/tinystories-10k.json`.
 
+Training also creates a disk-backed `*.tokens.bin` cache next to the text
+corpus. The cache is built in bounded-memory chunks with progress output and is
+reused automatically while the corpus and tokenizer are unchanged. This avoids
+expanding a large corpus into an in-memory Python list before training starts.
+
 ```bash
 # Download and export the default TinyStories subset
 python scripts/prepare_data.py
