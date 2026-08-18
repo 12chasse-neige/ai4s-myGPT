@@ -103,6 +103,66 @@ preserved. MMLU remains structured JSON with its `question`, `subject`, four
 (for example, MMLU's `dev` split for few-shot examples), and `--output` to
 choose another destination.
 
+## Model evaluation
+
+Use the best BPE checkpoint for final evaluation. The WikiText evaluator scores
+the complete test export with overlapping context windows and reports
+token-weighted negative log-likelihood, BPE-token perplexity, and bits per
+token. It does not split the benchmark test file again.
+
+```bash
+python scripts/evaluate_wikitext.py \
+  --checkpoint outputs/gpt-pretrain-bpe/best.pt
+```
+
+The default report is `outputs/evaluation/wikitext.json`. A quick connectivity
+check can use `--max-tokens 4096`; label that result as a prefix smoke test, not
+as the full WikiText score. Perplexity is only directly comparable between runs
+that use the same tokenizer and tokenization convention.
+
+MMLU is evaluated by formatting each question and its four choices, then
+selecting the answer label (` A`, ` B`, ` C`, or ` D`) with the greatest
+conditional log-likelihood. The following command runs zero-shot evaluation on
+the already prepared test file:
+
+```bash
+python scripts/evaluate_mmlu.py \
+  --checkpoint outputs/gpt-pretrain-bpe/best.pt \
+  --predictions-output outputs/evaluation/mmlu-predictions.jsonl
+```
+
+For the conventional subject-matched five-shot setup, fetch the MMLU development
+split once and pass it separately. Demonstrations that do not fit the
+checkpoint context are dropped and the effective shot counts are recorded in
+the report.
+
+```bash
+python scripts/prepare_data.py --mmlu --split dev
+python scripts/evaluate_mmlu.py \
+  --checkpoint outputs/gpt-pretrain-bpe/best.pt \
+  --few-shot-data outputs/data/mmlu-all-dev.json \
+  --shots 5
+```
+
+Use `--limit 20` or `--subjects abstract_algebra` for a smoke test. The summary
+at `outputs/evaluation/mmlu.json` includes micro accuracy, macro average across
+subjects, per-subject accuracy, scoring details, and context-truncation counts.
+
+Finally, generate reproducible qualitative examples for the report:
+
+```bash
+python scripts/generate_samples.py \
+  --checkpoint outputs/gpt-pretrain-bpe/best.pt
+```
+
+This writes both `outputs/evaluation/generation_samples.md` and a matching JSON
+file. Pretraining checkpoints receive completion prompts covering story,
+explanation, and dialogue; SFT checkpoints automatically receive the same
+Stanford Alpaca instruction template used during tuning. Sampling seed,
+temperature, top-k, and token limit are stored with every output. These excerpts
+are qualitative evidence only and should be shown without editing or selecting
+only unusually favorable random samples.
+
 ## Instruction tuning
 
 The instruction-tuning stage starts from a completed myGPT checkpoint and

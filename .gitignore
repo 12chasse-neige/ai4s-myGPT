@@ -12,4 +12,7 @@ notebooks/.ipynb_checkpoints/
 
 # local lectures
 HUGGINGFACE_LLM_COURSE_GUIDE.md
+project.pdf
 
+# final paper
+paper/
