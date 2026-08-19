@@ -15,6 +15,7 @@ from mygpt.evaluation import (
     build_mmlu_prompt,
     evaluate_mmlu_records,
     evaluate_token_ids,
+    fit_mmlu_prompt,
     load_mmlu_records,
 )
 from mygpt.model import GPT
@@ -112,6 +113,39 @@ class EvaluationUnitTest(unittest.TestCase):
             )
             with self.assertRaisesRegex(ValueError, "four non-empty choices"):
                 load_mmlu_records(path)
+
+    def test_sft_mmlu_prompt_uses_alpaca_template_and_unspaced_labels(self) -> None:
+        tokenizer = BPETokenizer.train_from_iterator(
+            [
+                build_mmlu_prompt(mmlu_record(0)),
+                "Below is an instruction. ### Instruction: ### Response: A B C D",
+            ],
+            vocab_size=512,
+            min_frequency=1,
+        )
+        prompt, shots, truncated = fit_mmlu_prompt(
+            mmlu_record(0),
+            [],
+            tokenizer,
+            256,
+            prompt_mode="instruction",
+        )
+        self.assertIn("### Instruction:", prompt)
+        self.assertTrue(prompt.endswith("### Response:\n"))
+        self.assertEqual(shots, 0)
+        self.assertFalse(truncated)
+
+        candidates = [tokenizer.encode(label) for label in "ABCD"]
+        model = PreferredTokenModel(tokenizer.vocab_size, candidates[0][0])
+        summary, _ = evaluate_mmlu_records(
+            model,
+            tokenizer,
+            [mmlu_record(0)],
+            torch.device("cpu"),
+            prompt_mode="instruction",
+        )
+        self.assertEqual(summary["prompt_mode"], "instruction")
+        self.assertEqual(summary["answer_continuations"], list("ABCD"))
 
 
 class EvaluationCliTest(unittest.TestCase):

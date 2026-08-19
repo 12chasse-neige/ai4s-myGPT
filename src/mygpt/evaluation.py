@@ -16,6 +16,7 @@ import torch.nn.functional as F
 
 from .checkpoint import load_checkpoint
 from .config import ExperimentConfig
+from .instruction import format_alpaca_prompt
 from .model import GPT
 from .tokenizer import BPETokenizer
 from .trainer import select_device
@@ -269,13 +270,24 @@ def fit_mmlu_prompt(
     demonstrations: Sequence[Mapping[str, object]],
     tokenizer: BPETokenizer,
     block_size: int,
+    *,
+    prompt_mode: str = "completion",
 ) -> tuple[str, int, bool]:
     """Drop trailing demonstrations until a prompt fits the model context."""
+    if prompt_mode not in {"completion", "instruction"}:
+        raise ValueError("prompt_mode must be 'completion' or 'instruction'")
+
+    def format_prompt(examples: Sequence[Mapping[str, object]]) -> str:
+        prompt = build_mmlu_prompt(record, examples)
+        if prompt_mode == "instruction":
+            return format_alpaca_prompt(prompt)
+        return prompt
+
     retained = list(demonstrations)
-    prompt = build_mmlu_prompt(record, retained)
+    prompt = format_prompt(retained)
     while retained and len(tokenizer.encode(prompt)) > block_size:
         retained.pop()
-        prompt = build_mmlu_prompt(record, retained)
+        prompt = format_prompt(retained)
     truncated = len(tokenizer.encode(prompt)) > block_size
     return prompt, len(retained), truncated
 
@@ -346,6 +358,7 @@ def evaluate_mmlu_records(
     *,
     demonstrations_by_subject: Mapping[str, Sequence[Mapping[str, object]]] | None = None,
     shots: int = 0,
+    prompt_mode: str = "completion",
     batch_size: int = 1,
     progress_every: int = 0,
     progress: Callable[[str], None] = print,
@@ -360,7 +373,13 @@ def evaluate_mmlu_records(
     if progress_every < 0:
         raise ValueError("progress_every cannot be negative")
     demonstrations_by_subject = demonstrations_by_subject or {}
-    candidate_texts = [f" {label}" for label in CHOICE_LABELS]
+    if prompt_mode not in {"completion", "instruction"}:
+        raise ValueError("prompt_mode must be 'completion' or 'instruction'")
+    candidate_texts = (
+        [f" {label}" for label in CHOICE_LABELS]
+        if prompt_mode == "completion"
+        else list(CHOICE_LABELS)
+    )
     candidate_ids = [tokenizer.encode(candidate) for candidate in candidate_texts]
     if any(not candidate for candidate in candidate_ids):
         raise ValueError("the tokenizer produced an empty MMLU answer label")
@@ -379,6 +398,7 @@ def evaluate_mmlu_records(
             available[:shots],
             tokenizer,
             model.config.block_size,
+            prompt_mode=prompt_mode,
         )
         prompt_ids = tokenizer.encode(prompt)
         prepared.append((index, record, prompt_ids, used_shots, truncated))
@@ -467,6 +487,7 @@ def evaluate_mmlu_records(
     summary: dict[str, object] = {
         "benchmark": "mmlu",
         "scoring": "answer_label_conditional_log_likelihood",
+        "prompt_mode": prompt_mode,
         "requested_shots": shots,
         "batch_size": batch_size,
         "forward_passes": forward_passes,

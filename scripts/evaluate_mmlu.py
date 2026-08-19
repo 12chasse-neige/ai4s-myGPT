@@ -29,6 +29,15 @@ def parse_args() -> argparse.Namespace:
         "--checkpoint", type=Path, required=True, help="BPE checkpoint to evaluate"
     )
     parser.add_argument(
+        "--prompt-mode",
+        choices=("auto", "completion", "instruction"),
+        default="auto",
+        help=(
+            "prompt style; auto uses the Stanford Alpaca template for SFT "
+            "checkpoints and completion prompts otherwise"
+        ),
+    )
+    parser.add_argument(
         "--data", type=Path, default=DEFAULT_DATA, help="MMLU test JSON export"
     )
     parser.add_argument(
@@ -113,9 +122,17 @@ def main() -> None:
         )
 
     loaded = load_model_for_evaluation(args.checkpoint, args.device)
+    prompt_mode = args.prompt_mode
+    if prompt_mode == "auto":
+        prompt_mode = (
+            "instruction"
+            if loaded.metadata["training_stage"] == "sft"
+            else "completion"
+        )
     print(
         f"device={loaded.device} parameters={loaded.model.num_parameters():,} "
-        f"questions={len(records):,}/{selected_total:,} shots={args.shots}",
+        f"questions={len(records):,}/{selected_total:,} shots={args.shots} "
+        f"prompt_mode={prompt_mode}",
         flush=True,
     )
     summary, predictions = evaluate_mmlu_records(
@@ -125,6 +142,7 @@ def main() -> None:
         loaded.device,
         demonstrations_by_subject=demonstrations,
         shots=args.shots,
+        prompt_mode=prompt_mode,
         batch_size=args.batch_size,
         progress_every=args.progress_every,
     )
@@ -137,6 +155,7 @@ def main() -> None:
         "evaluation_scope": "full_selection" if args.limit is None else "prefix_smoke_test",
         "selected_questions_before_limit": selected_total,
         "selected_subjects": sorted(selected_subjects) if selected_subjects else "all",
+        "requested_prompt_mode": args.prompt_mode,
         "model": loaded.metadata,
     }
     write_json_atomic(args.output, report)

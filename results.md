@@ -2,52 +2,252 @@
 
 ## Technical summary
 
-The evaluated checkpoint demonstrates locally coherent English story generation,
-but it does not yet show reliable out-of-domain language modeling, factual
-explanation, conversation, or multiple-choice reasoning.
+Evaluation now covers both the selected pretraining checkpoint and the selected
+instruction-tuned (SFT) checkpoint. SFT improves broad-text likelihood and
+instruction-shaped response behavior, but it does not establish factual or
+multiple-choice reasoning ability.
 
-- **WikiText-2:** full-test BPE-token perplexity is **929.84**
-  (average negative log-likelihood **6.8350**, **9.8608 bits/token**) over
-  442,868 next-token predictions. This is far worse than the checkpoint's
-  TinyStories validation loss, showing a substantial domain-generalization gap.
-- **MMLU:** zero-shot micro accuracy is **25.27%** (**3,548/14,042**) and
-  macro subject accuracy is **24.98%** across all 57 subjects. The 95% Wilson
-  interval for micro accuracy is **24.56%–25.99%**, which contains the uniform
-  four-choice chance baseline of 25%.
-- **MMLU answer bias:** the model selected answer **C for 92.39%** of questions,
-  even though gold answers are approximately balanced. The MMLU result therefore
-  does not constitute evidence of reasoning ability.
-- **Qualitative generation:** the story sample is grammatical and maintains a
-  simple narrative, but it is repetitive. The factual explanation is incorrect,
-  and the dialogue loses the original speaker and topic. These samples support a
-  limited claim of language-generation ability, not conversational competence.
+- **Held-out SFT response loss:** the complete deterministic Alpaca validation
+  split gives response-only loss **2.5409** and response-token perplexity
+  **12.69** over 2,600 usable records (325 batches).
+- **WikiText-2:** SFT lowers full-test BPE-token perplexity from **929.84** to
+  **183.63** on the identical 442,868 next-token targets. Average NLL falls from
+  **6.8350** to **5.2129**. This is a substantial out-of-domain likelihood
+  improvement, although the absolute perplexity remains high.
+- **MMLU:** the SFT checkpoint scores **23.80%** (**3,342/14,042**) with its
+  native Stanford Alpaca instruction template and **22.87%**
+  (**3,211/14,042**) with the original completion prompt. Both are below the
+  25% four-choice chance baseline and below the pretraining result of **25.27%**.
+- **MMLU answer bias remains severe:** instruction prompting produces almost
+  only A or C, while completion prompting produces A for **94.20%** of items.
+- **Qualitative SFT generation:** the model returns direct task-shaped answers,
+  but the story drifts away from gardening, the sky explanation is incorrect,
+  and the presentation advice is repetitive and awkward. These fixed samples
+  show partial instruction-format learning, not reliable instruction following.
 
 ## Evaluation scope
 
-| Item | Evaluated value |
-|---|---:|
-| Checkpoint | `outputs/gpt-pretrain-bpe/best.pt` |
-| Training stage | Pretraining |
-| Checkpoint step | 75,000 |
-| Saved best TinyStories validation loss | 1.1276 |
-| Parameters | 66,053,760 |
-| Transformer shape | 12 layers, 10 heads, embedding width 640 |
-| Context length | 1,024 BPE tokens |
-| Vocabulary | 10,000 byte-level BPE tokens |
-| Evaluation device | CPU |
+| Item | Pretraining | SFT |
+|---|---:|---:|
+| Checkpoint | `outputs/gpt-pretrain-bpe/best.pt` | `outputs/gpt-sft-bpe/best.pt` |
+| Checkpoint step | 75,000 | 59,500 |
+| Source pretraining step | — | 75,000 |
+| Saved best stage validation loss | 1.1276 | 2.5576 response-only |
+| Parameters | 66,053,760 | 66,053,760 |
+| Transformer shape | 12 layers, 10 heads, width 640 | Same |
+| Context length | 1,024 BPE tokens | 1,024 BPE tokens |
+| Vocabulary | 10,000 byte-level BPE tokens | Same tokenizer and vocabulary |
+| Evaluation device | CPU | Apple MPS |
 
-The evaluation used the complete locally prepared WikiText-2 raw test split and
-the complete MMLU test split. MMLU was evaluated zero-shot because no development
-split was supplied for few-shot demonstrations. The qualitative assessment used
-three fixed prompts with one deterministic sample per prompt.
+The evaluations use the complete locally prepared WikiText-2 raw test split and
+complete MMLU test split. MMLU is zero-shot because no development split was
+provided. For SFT, `auto` prompt selection uses the same Stanford Alpaca
+instruction template used in training; a second completion-mode run holds the
+pretraining prompt fixed for direct comparison. Each qualitative assessment
+uses three fixed prompts and one deterministic sample per prompt.
 
 | Evaluation | Scope | Denominator |
 |---|---|---:|
 | WikiText-2 raw test | Complete test text | 442,869 tokens; 442,868 predictions |
-| MMLU test | All 57 subjects, zero-shot | 14,042 questions |
-| Qualitative generation | Story, explanation, dialogue | 3 prompts |
+| Alpaca response validation | Complete deterministic 5% split | 2,600 usable records; 325 batches |
+| MMLU test | All 57 subjects, zero-shot | 14,042 questions per prompt mode |
+| Qualitative generation | Story, explanation, conversation | 3 prompts per checkpoint |
 
-## WikiText shows a large out-of-domain language-modeling gap
+## SFT checkpoint evaluation
+
+### Complete held-out response loss
+
+The SFT evaluator reconstructed the dataset contract saved in the checkpoint:
+52,002 Stanford Alpaca records, a seeded 95/5 split, response-only targets, and
+the `stanford_alpaca_v1` prompt template. The validation split contains 2,601
+records; one empty response is skipped, leaving 2,600 usable records. No
+validation prompt, input, or response was truncated.
+
+| Metric | Result |
+|---|---:|
+| Full response-only validation loss | 2.5409 |
+| Response-token perplexity | 12.69 |
+| Usable validation records | 2,600 / 2,601 |
+| Validation batches | 325 |
+| Batch size | 8 |
+| Saved training-time best validation loss | 2.5576 |
+
+The full result is slightly lower than the saved training-time value because
+training selected checkpoints using at most 50 validation batches, whereas this
+evaluation uses all 325 batches. Response-token perplexity is conditional on the
+instruction prompt and is not directly comparable with raw WikiText perplexity.
+
+### WikiText language-model retention and transfer
+
+| Metric | Pretraining | SFT | Change after SFT |
+|---|---:|---:|---:|
+| Average NLL | 6.8350 | 5.2129 | -1.6221 |
+| Perplexity | 929.84 | 183.63 | -80.25% (5.06x lower) |
+| Bits per token | 9.8608 | 7.5206 | -2.3402 |
+| Predictions | 442,868 | 442,868 | Identical targets |
+| Context windows | 865 | 865 | Identical |
+
+This is an apples-to-apples comparison: both checkpoints share the tokenizer,
+model shape, context length, raw text, stride, and target-counting convention.
+SFT substantially improves likelihood on WikiText, plausibly because Alpaca
+adds broader prose and task language than TinyStories. The SFT perplexity of
+183.63 is still high, so this is evidence of improvement rather than strong
+general-domain language modeling.
+
+### MMLU remains below chance
+
+| Metric | Pretraining completion | SFT instruction | SFT completion |
+|---|---:|---:|---:|
+| Correct / total | 3,548 / 14,042 | 3,342 / 14,042 | 3,211 / 14,042 |
+| Micro accuracy | 25.27% | 23.80% | 22.87% |
+| 95% Wilson interval | 24.56%–25.99% | 23.10%–24.51% | 22.18%–23.57% |
+| Macro subject accuracy | 24.98% | 23.71% | 23.15% |
+| Difference from 25% chance | +0.27 pp | -1.20 pp | -2.13 pp |
+| Prompts over context | 11 | 12 | 11 |
+
+Instruction mode wraps the conventional question/choices/`Answer:` task in the
+checkpoint's Stanford Alpaca template and scores response labels `A`, `B`, `C`,
+and `D` without a leading space, matching SFT response tokenization. Completion
+mode uses exactly the pretraining evaluator's prompt and continuations. Neither
+SFT result supports a reasoning claim, and the prompt-sensitive label collapse
+shows that accuracy changes mainly reflect output calibration.
+
+| Predicted label | SFT instruction | Share | SFT completion | Share | Gold share |
+|---|---:|---:|---:|---:|---:|
+| A | 7,388 | 52.61% | 13,228 | 94.20% | 22.95% |
+| B | 274 | 1.95% | 79 | 0.56% | 24.65% |
+| C | 6,368 | 45.35% | 222 | 1.58% | 25.51% |
+| D | 12 | 0.09% | 513 | 3.65% | 26.89% |
+
+For the native instruction prompt, the highest observed subject accuracy is
+international law (33.9%, 41/121), followed by world religions (33.3%, 57/171).
+The lowest is high-school government and politics (17.1%, 33/193), followed by
+professional medicine (17.3%, 47/272). These are descriptive slices of an
+overall below-chance, label-biased result and should not be treated as stable
+subject capabilities.
+
+### Complete SFT instruction-mode per-subject results
+
+| Subject | Correct | Total | Accuracy |
+|---|---:|---:|---:|
+| Abstract algebra | 24 | 100 | 24.0% |
+| Anatomy | 42 | 135 | 31.1% |
+| Astronomy | 36 | 152 | 23.7% |
+| Business ethics | 24 | 100 | 24.0% |
+| Clinical knowledge | 69 | 265 | 26.0% |
+| College biology | 34 | 144 | 23.6% |
+| College chemistry | 18 | 100 | 18.0% |
+| College computer science | 24 | 100 | 24.0% |
+| College mathematics | 22 | 100 | 22.0% |
+| College medicine | 39 | 173 | 22.5% |
+| College physics | 18 | 102 | 17.6% |
+| Computer security | 28 | 100 | 28.0% |
+| Conceptual physics | 65 | 235 | 27.7% |
+| Econometrics | 28 | 114 | 24.6% |
+| Electrical engineering | 37 | 145 | 25.5% |
+| Elementary mathematics | 87 | 378 | 23.0% |
+| Formal logic | 24 | 126 | 19.0% |
+| Global facts | 28 | 100 | 28.0% |
+| High school biology | 58 | 310 | 18.7% |
+| High school chemistry | 52 | 203 | 25.6% |
+| High school computer science | 26 | 100 | 26.0% |
+| High school European history | 38 | 165 | 23.0% |
+| High school geography | 44 | 198 | 22.2% |
+| High school government and politics | 33 | 193 | 17.1% |
+| High school macroeconomics | 85 | 390 | 21.8% |
+| High school mathematics | 65 | 270 | 24.1% |
+| High school microeconomics | 51 | 238 | 21.4% |
+| High school physics | 34 | 151 | 22.5% |
+| High school psychology | 121 | 545 | 22.2% |
+| High school statistics | 40 | 216 | 18.5% |
+| High school US history | 51 | 204 | 25.0% |
+| High school world history | 63 | 237 | 26.6% |
+| Human aging | 50 | 223 | 22.4% |
+| Human sexuality | 35 | 131 | 26.7% |
+| International law | 41 | 121 | 33.9% |
+| Jurisprudence | 25 | 108 | 23.1% |
+| Logical fallacies | 41 | 163 | 25.2% |
+| Machine learning | 25 | 112 | 22.3% |
+| Management | 20 | 103 | 19.4% |
+| Marketing | 69 | 234 | 29.5% |
+| Medical genetics | 19 | 100 | 19.0% |
+| Miscellaneous | 200 | 783 | 25.5% |
+| Moral disputes | 95 | 346 | 27.5% |
+| Moral scenarios | 214 | 895 | 23.9% |
+| Nutrition | 84 | 306 | 27.5% |
+| Philosophy | 63 | 311 | 20.3% |
+| Prehistory | 74 | 324 | 22.8% |
+| Professional accounting | 68 | 282 | 24.1% |
+| Professional law | 373 | 1,534 | 24.3% |
+| Professional medicine | 47 | 272 | 17.3% |
+| Professional psychology | 150 | 612 | 24.5% |
+| Public relations | 20 | 110 | 18.2% |
+| Security studies | 49 | 245 | 20.0% |
+| Sociology | 54 | 201 | 26.9% |
+| US foreign policy | 25 | 100 | 25.0% |
+| Virology | 36 | 166 | 21.7% |
+| World religions | 57 | 171 | 33.3% |
+
+### SFT qualitative samples show partial task-shape learning
+
+Generation used the saved Alpaca prompt template, temperature 0.8, top-k 40,
+160 maximum new tokens, and seeds 42–44. All outputs below are unedited.
+
+**Story instruction (seed 42)**
+
+> Write a short children's story about a robot that learns to garden.
+
+**Model output**
+
+> Once upon a time, there was a robot named Fyri who had never been out on the
+> same road. He was a robot who felt like he was never in the same area. He felt
+> like he was going on a new adventure, no matter how hard it took to get there.
+>
+> One day, Fyri decided it was time to take a step into the forest. It was an
+> adventure and he was sure he would never be able to get there. He went walking
+> and looking around, but he couldn't make any sound.
+>
+> He continued his journey, but he still felt like he was the only one that he
+> had ever been on the other side. After a long and difficult journey, he finally
+> arrived at the end of the forest.
+>
+> He was so
+
+The output has the requested children's-story form and includes a robot, but it
+omits gardening, repeats itself, and ends mid-sentence at the token limit.
+
+**Explanation instruction (seed 43)**
+
+> Explain why the sky appears blue to a curious ten-year-old.
+
+**Model output**
+
+> The sky appears blue because of the vast blue hue to its vast blue hue and its
+> beauty. The blue hue is also captivating of a person's interests, with a sense
+> of purpose and optimism. The vast blue hue is often associated with the blue
+> and is a desire to adapt.
+
+The model attempts a direct explanation, but it is circular and never mentions
+sunlight, atmospheric scattering, or wavelength. It is factually inadequate.
+
+**Conversation instruction and input (seed 44)**
+
+> Respond helpfully and politely to the user.
+>
+> User: I am nervous about my first presentation tomorrow. What should I do?
+
+**Model output**
+
+> To help you stay organized, it is important to set a timeline and focus on one
+> thing to do your research. Check out your presentation and make sure to have a
+> priority time for it. Make sure to include all of the tasks you need to achieve
+> as well as stay organized. Allow your presentation on time and get some time to
+> plan.
+
+The response is on topic and offers planning advice, but it is repetitive,
+grammatically awkward, and lacks concrete presentation-specific guidance.
+
+## Pretraining WikiText shows a large out-of-domain language-modeling gap
 
 | Metric | Result |
 |---|---:|
@@ -72,7 +272,7 @@ after the first was counted exactly once. Perplexity is BPE-token perplexity and
 should not be directly compared with results that use a different tokenizer or
 word-level normalization.
 
-## MMLU performance is at chance and dominated by answer-label bias
+## Pretraining MMLU is at chance and dominated by answer-label bias
 
 | Metric | Result |
 |---|---:|
@@ -168,7 +368,7 @@ near-chance overall result and pervasive C-label bias.
 | Virology | 36 | 166 | 21.7% |
 | World religions | 49 | 171 | 28.7% |
 
-## Qualitative samples show fluency but weak task adherence
+## Pretraining qualitative samples show fluency but weak task adherence
 
 Generation used temperature 0.8, top-k 40, a maximum of 160 new tokens, and
 seeds 42–44. The checkpoint is pretrained rather than instruction-tuned, so the
@@ -254,17 +454,25 @@ saved in the checkpoint. It uses overlapping 1,024-token windows with stride
 is counted once. Losses are summed over tokens before calculating mean negative
 log-likelihood and perplexity.
 
+The held-out SFT metric instead reconstructs the saved Alpaca split and prompt
+template, masks every prompt target, and averages cross-entropy only over
+response and EOS targets. It evaluates every validation batch; no weights or
+optimizer state are changed.
+
 ### Multiple-choice reasoning
 
 Each MMLU item is formatted with its question, four labeled choices, and the
-suffix `Answer:`. For each label continuation (` A`, ` B`, ` C`, ` D`), the
-evaluator calculates conditional log-likelihood and selects the maximum. All
-four labels are one token under this checkpoint's tokenizer. This is a zero-shot
-evaluation; accuracy is exact match against the provided answer index.
+suffix `Answer:`. Completion mode scores the continuations (` A`, ` B`, ` C`,
+` D`). SFT instruction mode wraps that task in the saved Alpaca template and
+scores response continuations (`A`, `B`, `C`, `D`) without a leading space,
+matching how responses were separately tokenized during tuning. All labels are
+one token under the shared tokenizer. Accuracy is exact match against the
+provided answer index.
 
-Eleven unusually long prompts exceeded 1,024 tokens and were left-truncated by
-the scoring function, retaining the final context that contains the choices and
-answer suffix. This affects 0.08% of MMLU and cannot explain the overall result.
+Eleven completion prompts and twelve instruction prompts exceeded 1,024 tokens
+and were left-truncated by the scoring function, retaining the final context
+that contains the choices and answer suffix. This affects at most 0.09% of MMLU
+and cannot explain the aggregate results.
 
 ### Batching and result integrity
 
@@ -278,18 +486,25 @@ cannot influence its logits. Batched and single-example checks agreed:
   difference `1.24e-5` between single-example and batched inference.
 - The MMLU JSONL contains exactly 14,042 sequentially indexed predictions, and
   recomputing correctness from those rows reproduces 3,548 correct answers.
-- The complete project suite passes: 37 tests and 4 subtests.
+- The SFT 128-token WikiText CPU/MPS average-NLL difference is `1.44e-6`.
+- The first five instruction-mode SFT MMLU questions have identical CPU/MPS
+  predictions; maximum answer-score difference is `7.15e-6`.
+- Both SFT MMLU JSONL files contain 14,042 sequential indices; recomputation
+  reproduces 3,342 instruction-mode and 3,211 completion-mode correct answers.
+- The complete project suite passes: 38 tests and 4 subtests.
 
 ## Limitations and recommended next steps
 
-1. **The checkpoint is specialized to TinyStories.** Broader pretraining data is
-   needed before WikiText can be used as evidence of general language modeling.
+1. **The pretraining checkpoint is specialized to TinyStories.** Alpaca SFT
+   improves WikiText likelihood substantially, but perplexity 183.63 is still
+   not evidence of strong general-domain language modeling.
 2. **MMLU is zero-shot and strongly label-biased.** Repeat with the official
    subject-matched development examples (for example, five-shot prompting) and
-   examine whether demonstrations calibrate the answer-label distribution.
-3. **The checkpoint is not instruction-tuned.** Evaluate factual explanation and
-   conversation again after SFT, using the instruction prompt template rather
-   than treating completion as dialogue competence.
+   examine whether demonstrations calibrate the answer-label distributions in
+   both completion and instruction modes.
+3. **Held-out response loss is teacher-forced.** It measures probability on
+   reference Alpaca responses, not whether free-form answers are correct,
+   helpful, harmless, or preferred by users.
 4. **Qualitative sampling is deliberately small.** Preserve fixed prompts and
    seeds, but expand to multiple samples per prompt and score factuality,
    coherence, repetition, and instruction adherence with a written rubric.
@@ -298,12 +513,42 @@ cannot influence its logits. Batched and single-example checks agreed:
 
 ## Further evaluation questions
 
-- Does subject-matched five-shot prompting reduce the 92.4% preference for C,
-  or is answer-label calibration still required?
-- Does instruction tuning improve factual and conversational prompt adherence
-  without degrading the pretrained model's story-generation fluency?
-- How much broader pretraining data is required before WikiText perplexity and
-  MMLU accuracy improve together rather than only within the TinyStories domain?
+- Does subject-matched five-shot prompting reduce the pretraining C bias and the
+  SFT A/C biases, or is explicit answer-label calibration required?
+- Does evaluation on held-out instruction benchmarks (rather than Alpaca
+  teacher-forced loss) confirm any general instruction-following improvement?
+- Which additions to pretraining data preserve the SFT WikiText gain while also
+  improving factuality and MMLU beyond chance?
+
+## Reproduction commands
+
+Run from the repository root in the `ai4s-gpt` environment with
+`PYTHONPATH=src`. The completed SFT evaluations used:
+
+```bash
+python scripts/evaluate.py \
+  --checkpoint outputs/gpt-sft-bpe/best.pt --device mps
+
+python scripts/evaluate_wikitext.py \
+  --checkpoint outputs/gpt-sft-bpe/best.pt --device mps \
+  --batch-size 4 --output outputs/evaluation/sft-wikitext.json
+
+python scripts/evaluate_mmlu.py \
+  --checkpoint outputs/gpt-sft-bpe/best.pt --device mps --batch-size 8 \
+  --output outputs/evaluation/sft-mmlu-instruction.json \
+  --predictions-output outputs/evaluation/sft-mmlu-instruction-predictions.jsonl
+
+python scripts/evaluate_mmlu.py \
+  --checkpoint outputs/gpt-sft-bpe/best.pt --device mps --batch-size 8 \
+  --prompt-mode completion \
+  --output outputs/evaluation/sft-mmlu-completion.json \
+  --predictions-output outputs/evaluation/sft-mmlu-completion-predictions.jsonl
+
+python scripts/generate_samples.py \
+  --checkpoint outputs/gpt-sft-bpe/best.pt --device mps \
+  --output outputs/evaluation/sft-generation-samples.md \
+  --json-output outputs/evaluation/sft-generation-samples.json
+```
 
 ## Reproducibility artifacts
 
@@ -317,6 +562,17 @@ cannot influence its logits. Batched and single-example checks agreed:
   [`outputs/evaluation/generation_samples.md`](outputs/evaluation/generation_samples.md)
 - Qualitative machine-readable report:
   [`outputs/evaluation/generation_samples.json`](outputs/evaluation/generation_samples.json)
+- SFT WikiText aggregate report:
+  [`outputs/evaluation/sft-wikitext.json`](outputs/evaluation/sft-wikitext.json)
+- SFT native instruction-mode MMLU aggregate and predictions:
+  [`outputs/evaluation/sft-mmlu-instruction.json`](outputs/evaluation/sft-mmlu-instruction.json),
+  [`outputs/evaluation/sft-mmlu-instruction-predictions.jsonl`](outputs/evaluation/sft-mmlu-instruction-predictions.jsonl)
+- SFT completion-mode MMLU aggregate and predictions:
+  [`outputs/evaluation/sft-mmlu-completion.json`](outputs/evaluation/sft-mmlu-completion.json),
+  [`outputs/evaluation/sft-mmlu-completion-predictions.jsonl`](outputs/evaluation/sft-mmlu-completion-predictions.jsonl)
+- SFT qualitative Markdown and machine-readable reports:
+  [`outputs/evaluation/sft-generation-samples.md`](outputs/evaluation/sft-generation-samples.md),
+  [`outputs/evaluation/sft-generation-samples.json`](outputs/evaluation/sft-generation-samples.json)
 - Evaluation implementation:
   [`src/mygpt/evaluation.py`](src/mygpt/evaluation.py),
   [`scripts/evaluate_wikitext.py`](scripts/evaluate_wikitext.py),

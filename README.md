@@ -131,6 +131,12 @@ python scripts/evaluate_mmlu.py \
   --predictions-output outputs/evaluation/mmlu-predictions.jsonl
 ```
 
+With the default `--prompt-mode auto`, an SFT checkpoint wraps the MMLU task in
+the same Stanford Alpaca instruction template used during tuning and scores the
+unspaced response labels (`A`, `B`, `C`, or `D`). A pretraining checkpoint uses
+the original completion prompt. Pass `--prompt-mode completion` explicitly when
+an identical-prompt comparison with the pretraining checkpoint is required.
+
 For the conventional subject-matched five-shot setup, fetch the MMLU development
 split once and pass it separately. Demonstrations that do not fit the
 checkpoint context are dropped and the effective shot counts are recorded in
